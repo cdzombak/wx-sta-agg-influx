@@ -23,9 +23,9 @@ const (
 var Version = "<dev>"
 
 // TODO(cdzombak): basic CI for lint & binaries+docker+versioning
-// TODO(cdzombak): rain gauge aggregations
 // TODO(cdzombak): file issue for readme
 // TODO(cdzombak): file issue for increased Influx compatibility & config flexibility (eg. username, v2/v3) & validation
+// TODO(cdzombak): rain gauge aggregations (1h, 24h, event, rate: https://ambientweather.com/faqs/question/view/id/1454/ )
 
 func main() {
 	measurementName := flag.String("measurement", "weather_station", "Name of the measurement to read")
@@ -86,7 +86,7 @@ func main() {
 		}
 	}
 
-	// TODO(cdzombak): rain gauge aggregation
+	// TODO(cdzombak): rain gauge aggregation goes here, if rainGaugeField is set
 }
 
 func influxHealthcheck(client influxdb.Client) error {
