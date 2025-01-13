@@ -95,9 +95,9 @@ func stdDevThresholdsForWindDirIntervalCardinalResult(interval string) (float64,
 	case wdInterval30m:
 		return 44, 50
 	case wdInterval15m:
-		return 50, 54
+		return 48, 51
 	case wdInterval5m:
-		return 56, 60
+		return 50, 52
 	default:
 		panic(fmt.Sprintf("unknown interval: %s", interval))
 	}
