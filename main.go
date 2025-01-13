@@ -32,7 +32,7 @@ func main() {
 	tagsIn := flag.String("tags", "", "Comma-separated list of tag=value pairs to filter by and include in result measurements")
 	windDirectionField := flag.String("wind-dir-field", "", "Name of the field to use for wind direction (in degrees); if not set, wind direction will not be aggregated")
 	// rainGaugeField := flag.String("rain-field", "", "Name of the field to use for rain gauge (in mm); if not set, rain gauge will not be aggregated")
-	envFileName := flag.String("env", ".env", "Path to .env file to load environment variables from")
+	envFileName := flag.String("env", "", "Path to .env file to load environment variables from")
 	printVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
 
@@ -41,8 +41,10 @@ func main() {
 		os.Exit(ec.Success)
 	}
 
-	if err := godotenv.Load(*envFileName); err != nil {
-		log.Fatalf("Failed to load '%s': %v", *envFileName, err)
+	if *envFileName != "" {
+		if err := godotenv.Load(*envFileName); err != nil {
+			log.Fatalf("Failed to load '%s': %v", *envFileName, err)
+		}
 	}
 
 	influxClient, err := influxdb.NewHTTPClient(influxdb.HTTPConfig{
