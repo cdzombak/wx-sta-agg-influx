@@ -1,0 +1,6 @@
+-s dir
+--name wx-sta-agg-influx
+--description "Aggregator for wind and rain data stored in InfluxDB"
+--url "https://github.com/cdzombak/wx-sta-agg-influx"
+--maintainer "Chris Dzombak <https://www.dzombak.com>"
+--license MIT
