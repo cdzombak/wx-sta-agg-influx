@@ -180,7 +180,7 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 		if err != nil {
 			return fmt.Errorf("failed to parse time: %w", err)
 		}
-		if time.Since(t) > maxTimeBetweenAggsForWindDirInterval(interval) {
+		if time.Since(t.Add(windDirIntervalToDuration(interval)/2)) > maxTimeBetweenAggsForWindDirInterval(interval) {
 			intervalsTodo = append(intervalsTodo, interval)
 		}
 	}
@@ -259,11 +259,23 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 		}
 	}
 
-	fields := make(map[string]interface{})
+	bp, err := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
+		Database:        args.InfluxDB,
+		RetentionPolicy: args.InfluxRP,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create InfluxDB batch: %w", err)
+	}
+	tags := map[string]string{
+		"aggregator": fmt.Sprintf("%s/%s", ProductName, Version),
+	}
+	maps.Copy(tags, args.Tags)
+
 	for _, interval := range intervalsTodo {
 		if len(intervalData[interval]) == 0 {
 			continue
 		}
+		fields := make(map[string]interface{})
 		mean, err := libwx.WeightedAvgDirectionDeg(dirSeries(intervalData[interval]), spdSeries(intervalData[interval]))
 		if err != nil {
 			return fmt.Errorf("failed to calculate weighted average wind direction: %w", err)
@@ -284,30 +296,18 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 		fields[wdMeanResultFieldName(args, interval)] = mean.Unwrap()
 		fields[wdStdDevResultFieldName(args, interval)] = stdDev.Unwrap()
 		fields[wdMeanIntercardinalResultFieldName(args, interval)] = card
-	}
 
-	tags := map[string]string{
-		"aggregator": fmt.Sprintf("%s/%s", ProductName, Version),
+		point, err := influxdb.NewPoint(
+			args.MeasurementTo,
+			tags,
+			fields,
+			now.Add(-1*windDirIntervalToDuration(interval)/2),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create InfluxDB point: %w", err)
+		}
+		bp.AddPoint(point)
 	}
-	maps.Copy(tags, args.Tags)
-
-	point, err := influxdb.NewPoint(
-		args.MeasurementTo,
-		tags,
-		fields,
-		now,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create InfluxDB point: %w", err)
-	}
-	bp, err := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
-		Database:        args.InfluxDB,
-		RetentionPolicy: args.InfluxRP,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create InfluxDB batch: %w", err)
-	}
-	bp.AddPoint(point)
 
 	if err := retry.Do(
 		func() error {
