@@ -31,6 +31,7 @@ func main() {
 	measurementName := flag.String("measurement", "weather_station", "Name of the measurement to read")
 	tagsIn := flag.String("tags", "", "Comma-separated list of tag=value pairs to filter by and include in result measurements")
 	windDirectionField := flag.String("wind-dir-field", "", "Name of the field to use for wind direction (in degrees); if not set, wind direction will not be aggregated")
+	windSpeedField := flag.String("wind-speed-field", "", "Name of the field to use for wind speed; required iff wind-dir-field is given")
 	// rainGaugeField := flag.String("rain-field", "", "Name of the field to use for rain gauge (in mm); if not set, rain gauge will not be aggregated")
 	envFileName := flag.String("env", "", "Path to .env file to load environment variables from")
 	printVersion := flag.Bool("version", false, "Print version and exit")
@@ -64,12 +65,17 @@ func main() {
 		log.Fatalf("Failed to parse tags: %s", err)
 	}
 
+	if *windDirectionField != "" && *windSpeedField == "" {
+		log.Fatalln("wind-speed-field is required when wind-dir-field is set")
+	}
+
 	if *windDirectionField != "" {
 		if err := WindDirectionAgg(WindDirectionAggArgs{
 			MeasurementFrom:    *measurementName,
 			MeasurementTo:      *measurementName + "_agg",
 			Tags:               tags,
 			WindDirectionField: *windDirectionField,
+			WindSpeedField:     *windSpeedField,
 			Influx:             influxClient,
 			InfluxDB:           os.Getenv("INFLUX_DB"),
 			InfluxRP:           os.Getenv("INFLUX_RP"),

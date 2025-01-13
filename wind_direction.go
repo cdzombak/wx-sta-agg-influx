@@ -16,6 +16,7 @@ type WindDirectionAggArgs struct {
 	MeasurementFrom    string
 	MeasurementTo      string
 	WindDirectionField string
+	WindSpeedField     string
 	Tags               map[string]string
 
 	Influx             influxdb.Client
@@ -115,6 +116,27 @@ func wdMeanIntercardinalResultFieldName(args WindDirectionAggArgs, interval stri
 	return args.WindDirectionField + "_mean_intercardinal_" + interval
 }
 
+type wdDataPoint struct {
+	dir libwx.Degree
+	spd float64
+}
+
+func dirSeries(data []wdDataPoint) []libwx.Degree {
+	retv := make([]libwx.Degree, len(data))
+	for i, dp := range data {
+		retv[i] = dp.dir
+	}
+	return retv
+}
+
+func spdSeries(data []wdDataPoint) []float64 {
+	retv := make([]float64, len(data))
+	for i, dp := range data {
+		retv[i] = dp.spd
+	}
+	return retv
+}
+
 func WindDirectionAgg(args WindDirectionAggArgs) error {
 	// note: the given args are assumed to be valid.
 	// if this were a real project or API that other people would use, I'd validate them here.
@@ -171,7 +193,8 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 	now := time.Now()
 
 	// gather the data we'll need:
-	q := fmt.Sprintf("SELECT time, %s FROM %s WHERE time >= now()-%s %s ORDER BY time ASC", args.WindDirectionField, args.MeasurementFrom, intervalsTodo[0], tagsWhere)
+	q := fmt.Sprintf("SELECT time, %s, %s FROM %s WHERE time >= now()-%s %s ORDER BY time ASC",
+		args.WindDirectionField, args.WindSpeedField, args.MeasurementFrom, intervalsTodo[0], tagsWhere)
 	log.Printf("[DEBUG] query: %s", q)
 	r, err := args.Influx.Query(influxdb.Query{
 		Command:         q,
@@ -201,27 +224,37 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 	if r.Results[0].Series[0].Columns[1] != args.WindDirectionField {
 		return fmt.Errorf("expected second column to be '%s', got '%s'", args.WindDirectionField, r.Results[0].Series[0].Columns[1])
 	}
+	if r.Results[0].Series[0].Columns[2] != args.WindSpeedField {
+		return fmt.Errorf("expected thirs column to be '%s', got '%s'", args.WindSpeedField, r.Results[0].Series[0].Columns[2])
+	}
 
 	// aggregate data by interval:
 	// create aggregate & output data structures:
-	intervalData := make(map[string][]libwx.Degree)
+	intervalData := make(map[string][]wdDataPoint)
 	for _, interval := range intervalsTodo {
-		intervalData[interval] = []libwx.Degree{}
+		intervalData[interval] = []wdDataPoint{}
 	}
-	for _, datapoint := range r.Results[0].Series[0].Values {
+	for _, sourceDataPoint := range r.Results[0].Series[0].Values {
 		// this parsing could be cleaned up and made a lot more robust.
-		t, err := time.Parse(time.RFC3339, datapoint[0].(string))
-		if err != nil {
-			return fmt.Errorf("failed to parse time: %w", err)
-		}
-		wd, err := datapoint[1].(json.Number).Float64()
+		dir, err := sourceDataPoint[1].(json.Number).Float64()
 		if err != nil {
 			return fmt.Errorf("failed to parse wind direction: %w", err)
 		}
-
+		spd, err := sourceDataPoint[2].(json.Number).Float64()
+		if err != nil {
+			return fmt.Errorf("failed to parse wind speed: %w", err)
+		}
+		dp := wdDataPoint{
+			dir: libwx.Degree(dir).Clamped(),
+			spd: spd,
+		}
+		t, err := time.Parse(time.RFC3339, sourceDataPoint[0].(string))
+		if err != nil {
+			return fmt.Errorf("failed to parse time: %w", err)
+		}
 		for _, interval := range intervalsTodo {
 			if now.Sub(t) <= windDirIntervalToDuration(interval) {
-				intervalData[interval] = append(intervalData[interval], libwx.Degree(wd).Clamped())
+				intervalData[interval] = append(intervalData[interval], dp)
 			}
 		}
 	}
@@ -231,19 +264,25 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 		if len(intervalData[interval]) == 0 {
 			continue
 		}
-		mean := libwx.AvgDirectionDeg(intervalData[interval]).Unwrap()
-		stdDev := libwx.StdDevDeg(intervalData[interval]).Unwrap()
+		mean, err := libwx.WeightedAvgDirectionDeg(dirSeries(intervalData[interval]), spdSeries(intervalData[interval]))
+		if err != nil {
+			return fmt.Errorf("failed to calculate weighted average wind direction: %w", err)
+		}
+		stdDev, err := libwx.WeightedStdDevDirectionDeg(dirSeries(intervalData[interval]), spdSeries(intervalData[interval]))
+		if err != nil {
+			return fmt.Errorf("failed to calculate weighted stddev of wind direction: %w", err)
+		}
 		maxSecInt, maxInt := stdDevThresholdsForWindDirIntervalCardinalResult(interval)
 		card := ""
-		if stdDev > maxInt {
+		if stdDev.Unwrap() > maxInt {
 			card = "VAR"
-		} else if stdDev > maxSecInt {
-			card = libwx.DirectionStr(libwx.Degree(mean), libwx.DirectionStrPrecision1)
+		} else if stdDev.Unwrap() > maxSecInt {
+			card = libwx.DirectionStr(mean, libwx.DirectionStrPrecision1)
 		} else {
-			card = libwx.DirectionStr(libwx.Degree(mean), libwx.DirectionStrPrecision2)
+			card = libwx.DirectionStr(mean, libwx.DirectionStrPrecision2)
 		}
-		fields[wdMeanResultFieldName(args, interval)] = mean
-		fields[wdStdDevResultFieldName(args, interval)] = stdDev
+		fields[wdMeanResultFieldName(args, interval)] = mean.Unwrap()
+		fields[wdStdDevResultFieldName(args, interval)] = stdDev.Unwrap()
 		fields[wdMeanIntercardinalResultFieldName(args, interval)] = card
 	}
 
