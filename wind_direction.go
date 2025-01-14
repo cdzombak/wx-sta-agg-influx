@@ -68,13 +68,13 @@ func windDirIntervalToDuration(interval string) time.Duration {
 func maxTimeBetweenAggsForWindDirInterval(interval string) time.Duration {
 	switch interval {
 	case wdInterval6h:
-		return 30 * time.Minute
-	case wdInterval3h:
 		return 20 * time.Minute
-	case wdInterval1h:
+	case wdInterval3h:
 		return 10 * time.Minute
-	case wdInterval30m:
+	case wdInterval1h:
 		return 5 * time.Minute
+	case wdInterval30m:
+		return 2*time.Minute + 30*time.Second
 	case wdInterval15m:
 		return 2*time.Minute + 30*time.Second
 	case wdInterval5m:
