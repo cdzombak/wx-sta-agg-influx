@@ -68,17 +68,17 @@ func windDirIntervalToDuration(interval string) time.Duration {
 func maxTimeBetweenAggsForWindDirInterval(interval string) time.Duration {
 	switch interval {
 	case wdInterval6h:
-		return 1 * time.Hour
+		return 30 * time.Minute
 	case wdInterval3h:
-		return 40 * time.Minute
-	case wdInterval1h:
 		return 20 * time.Minute
-	case wdInterval30m:
+	case wdInterval1h:
 		return 10 * time.Minute
-	case wdInterval15m:
+	case wdInterval30m:
 		return 5 * time.Minute
-	case wdInterval5m:
+	case wdInterval15m:
 		return 2*time.Minute + 30*time.Second
+	case wdInterval5m:
+		return 1 * time.Minute
 	default:
 		panic(fmt.Sprintf("unknown interval: %s", interval))
 	}
@@ -88,15 +88,15 @@ func stdDevThresholdsForWindDirIntervalCardinalResult(interval string) (float64,
 	// returns: max (weighted) SD for secondary intercardinal, max SD for primary intercardinal (otherwise VAR)
 	switch interval {
 	case wdInterval6h:
-		return 30, 38
+		return 40, 41.5
 	case wdInterval3h:
-		return 35, 40
+		return 41, 42.5
 	case wdInterval1h:
-		return 38, 43
+		return 42, 43.5
 	case wdInterval30m:
-		return 42, 45
+		return 43, 44.5
 	case wdInterval15m:
-		return 43.5, 46
+		return 44, 45.5
 	case wdInterval5m:
 		return 45, 46.5
 	default:
