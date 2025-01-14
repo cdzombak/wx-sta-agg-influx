@@ -4,9 +4,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"maps"
 	"os"
 	"time"
 
+	"github.com/avast/retry-go"
 	ec "github.com/cdzombak/exitcode_go"
 	influxdb "github.com/influxdata/influxdb1-client/v2"
 	"github.com/joho/godotenv"
@@ -55,34 +57,67 @@ func main() {
 	}
 	defer influxClient.Close()
 
-	tags, err := ParseTags(*tagsIn)
+	qTags, err := ParseTags(*tagsIn)
 	if err != nil {
 		log.Fatalf("Failed to parse tags: %s", err)
 	}
+
+	wTags := map[string]string{
+		"aggregator": fmt.Sprintf("%s/%s", ProductName, Version),
+	}
+	maps.Copy(wTags, qTags)
 
 	if *windDirectionField != "" && *windSpeedField == "" {
 		log.Fatalln("wind-speed-field is required when wind-dir-field is set")
 	}
 
+	var points []*influxdb.Point
+
 	if *windDirectionField != "" {
-		if err := WindDirectionAgg(WindDirectionAggArgs{
+		wdPoints, err := WindDirectionAgg(WindDirectionAggArgs{
 			MeasurementFrom:    *measurementName,
 			MeasurementTo:      *measurementName + "_agg",
-			Tags:               tags,
+			QueryTags:          qTags,
+			WriteTags:          wTags,
 			WindDirectionField: *windDirectionField,
 			WindSpeedField:     *windSpeedField,
 			Influx:             influxClient,
 			InfluxDB:           os.Getenv("INFLUX_DB"),
 			InfluxRP:           os.Getenv("INFLUX_RP"),
 			InfluxQueryTimeout: influxReadTimeout,
-			InfluxWriteRetries: influxWriteRetries,
-		}); err != nil {
+		})
+		if err != nil {
 			log.Fatalf("Wind direction aggregation failed: %s", err)
 		}
+		points = append(points, wdPoints...)
 	}
 
 	// TODO(cdzombak): rain gauge aggregation goes here, if rainGaugeField is set
 	//                 https://github.com/cdzombak/wx-sta-agg-influx/issues/3
+
+	if len(points) == 0 {
+		log.Printf("no data to write")
+		return
+	}
+
+	bp, err := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
+		Database:        os.Getenv("INFLUX_DB"),
+		RetentionPolicy: os.Getenv("INFLUX_RP"),
+	})
+	if err != nil {
+		log.Fatalf("failed to create InfluxDB batch: %s", err)
+	}
+
+	bp.AddPoints(points)
+
+	if err := retry.Do(
+		func() error {
+			return influxClient.Write(bp)
+		},
+		retry.Attempts(influxWriteRetries),
+	); err != nil {
+		log.Printf("failed to write to Influx: %s", err.Error())
+	}
 }
 
 func influxHealthcheck(client influxdb.Client) error {

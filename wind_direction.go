@@ -4,10 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"maps"
 	"time"
 
-	"github.com/avast/retry-go"
 	"github.com/cdzombak/libwx"
 	influxdb "github.com/influxdata/influxdb1-client/v2"
 )
@@ -17,13 +15,13 @@ type WindDirectionAggArgs struct {
 	MeasurementTo      string
 	WindDirectionField string
 	WindSpeedField     string
-	Tags               map[string]string
+	QueryTags          map[string]string
+	WriteTags          map[string]string
 
 	Influx             influxdb.Client
 	InfluxDB           string
 	InfluxRP           string
 	InfluxQueryTimeout time.Duration
-	InfluxWriteRetries uint
 }
 
 const (
@@ -84,6 +82,22 @@ func maxTimeBetweenAggsForWindDirInterval(interval string) time.Duration {
 	}
 }
 
+func varThresholdForWindDirInterval(interval string) float64 {
+	th := 50.0
+	if interval == wdInterval6h {
+		th = 60
+	} else if interval == wdInterval3h {
+		th = 55
+	} else if interval == wdInterval1h {
+		th = 52
+	} else if interval == wdInterval30m {
+		th = 51.5
+	} else if interval == wdInterval15m {
+		th = 51
+	}
+	return th
+}
+
 func wdMeanResultFieldName(args WindDirectionAggArgs, interval string) string {
 	return args.WindDirectionField + "_mean_" + interval
 }
@@ -117,11 +131,11 @@ func spdSeries(data []wdDataPoint) []float64 {
 	return retv
 }
 
-func WindDirectionAgg(args WindDirectionAggArgs) error {
+func WindDirectionAgg(args WindDirectionAggArgs) ([]*influxdb.Point, error) {
 	// note: the given args are assumed to be valid.
 	// if this were a real project or API that other people would use, I'd validate them here.
 
-	tagsWhere := PartialWhereClauseForTags(args.Tags)
+	tagsWhere := PartialWhereClauseForTags(args.QueryTags)
 
 	// first, figure out which intervals we need to calculate.
 	var intervalsTodo []string
@@ -135,10 +149,10 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 			RetentionPolicy: args.InfluxRP,
 		})
 		if err != nil {
-			return fmt.Errorf("InfluxDB query failed: %w", err)
+			return nil, fmt.Errorf("InfluxDB query failed: %w", err)
 		}
 		if r.Err != "" {
-			return fmt.Errorf("InfluxDB query failed: %s", r.Err)
+			return nil, fmt.Errorf("InfluxDB query failed: %s", r.Err)
 		}
 
 		if len(r.Results) == 0 || len(r.Results[0].Series) == 0 {
@@ -147,18 +161,18 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 		}
 
 		if len(r.Results) > 1 {
-			return fmt.Errorf("expected 1 result, got %d", len(r.Results))
+			return nil, fmt.Errorf("expected 1 result, got %d", len(r.Results))
 		}
 		if len(r.Results[0].Series) > 1 {
-			return fmt.Errorf("expected 1 series, got %d", len(r.Results[0].Series))
+			return nil, fmt.Errorf("expected 1 series, got %d", len(r.Results[0].Series))
 		}
 		if r.Results[0].Series[0].Columns[0] != "time" {
-			return fmt.Errorf("expected first column to be 'time', got '%s'", r.Results[0].Series[0].Columns[0])
+			return nil, fmt.Errorf("expected first column to be 'time', got '%s'", r.Results[0].Series[0].Columns[0])
 		}
 
 		t, err := time.Parse(time.RFC3339, r.Results[0].Series[0].Values[0][0].(string))
 		if err != nil {
-			return fmt.Errorf("failed to parse time: %w", err)
+			return nil, fmt.Errorf("failed to parse time: %w", err)
 		}
 		if time.Since(t.Add(windDirIntervalToDuration(interval)/2)) > maxTimeBetweenAggsForWindDirInterval(interval) {
 			intervalsTodo = append(intervalsTodo, interval)
@@ -167,7 +181,7 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 
 	if len(intervalsTodo) == 0 {
 		log.Printf("no intervals to calculate")
-		return nil
+		return nil, nil
 	}
 
 	now := time.Now()
@@ -175,37 +189,37 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 	// gather the data we'll need:
 	q := fmt.Sprintf("SELECT time, %s, %s FROM %s WHERE time >= now()-%s %s ORDER BY time ASC",
 		args.WindDirectionField, args.WindSpeedField, args.MeasurementFrom, intervalsTodo[0], tagsWhere)
-	log.Printf("[DEBUG] query: %s", q)
+	// log.Printf("[DEBUG] query: %s", q)
 	r, err := args.Influx.Query(influxdb.Query{
 		Command:         q,
 		Database:        args.InfluxDB,
 		RetentionPolicy: args.InfluxRP,
 	})
 	if err != nil {
-		return fmt.Errorf("InfluxDB query failed: %w", err)
+		return nil, fmt.Errorf("InfluxDB query failed: %w", err)
 	}
 	if r.Err != "" {
-		return fmt.Errorf("InfluxDB query failed: %s", r.Err)
+		return nil, fmt.Errorf("InfluxDB query failed: %s", r.Err)
 	}
 	if len(r.Results) == 0 || len(r.Results[0].Series) == 0 {
 		log.Printf("no data to aggregate")
-		return nil
+		return nil, nil
 	}
 
 	if len(r.Results) > 1 {
-		return fmt.Errorf("expected 1 result, got %d", len(r.Results))
+		return nil, fmt.Errorf("expected 1 result, got %d", len(r.Results))
 	}
 	if len(r.Results[0].Series) > 1 {
-		return fmt.Errorf("expected 1 series, got %d", len(r.Results[0].Series))
+		return nil, fmt.Errorf("expected 1 series, got %d", len(r.Results[0].Series))
 	}
 	if r.Results[0].Series[0].Columns[0] != "time" {
-		return fmt.Errorf("expected first column to be 'time', got '%s'", r.Results[0].Series[0].Columns[0])
+		return nil, fmt.Errorf("expected first column to be 'time', got '%s'", r.Results[0].Series[0].Columns[0])
 	}
 	if r.Results[0].Series[0].Columns[1] != args.WindDirectionField {
-		return fmt.Errorf("expected second column to be '%s', got '%s'", args.WindDirectionField, r.Results[0].Series[0].Columns[1])
+		return nil, fmt.Errorf("expected second column to be '%s', got '%s'", args.WindDirectionField, r.Results[0].Series[0].Columns[1])
 	}
 	if r.Results[0].Series[0].Columns[2] != args.WindSpeedField {
-		return fmt.Errorf("expected thirs column to be '%s', got '%s'", args.WindSpeedField, r.Results[0].Series[0].Columns[2])
+		return nil, fmt.Errorf("expected thirs column to be '%s', got '%s'", args.WindSpeedField, r.Results[0].Series[0].Columns[2])
 	}
 
 	// aggregate data by interval:
@@ -218,11 +232,11 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 		// this parsing could be cleaned up and made a lot more robust.
 		dir, err := sourceDataPoint[1].(json.Number).Float64()
 		if err != nil {
-			return fmt.Errorf("failed to parse wind direction: %w", err)
+			return nil, fmt.Errorf("failed to parse wind direction: %w", err)
 		}
 		spd, err := sourceDataPoint[2].(json.Number).Float64()
 		if err != nil {
-			return fmt.Errorf("failed to parse wind speed: %w", err)
+			return nil, fmt.Errorf("failed to parse wind speed: %w", err)
 		}
 		dp := wdDataPoint{
 			dir: libwx.Degree(dir).Clamped(),
@@ -230,7 +244,7 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 		}
 		t, err := time.Parse(time.RFC3339, sourceDataPoint[0].(string))
 		if err != nil {
-			return fmt.Errorf("failed to parse time: %w", err)
+			return nil, fmt.Errorf("failed to parse time: %w", err)
 		}
 		for _, interval := range intervalsTodo {
 			if now.Sub(t) <= windDirIntervalToDuration(interval) {
@@ -239,17 +253,7 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 		}
 	}
 
-	bp, err := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
-		Database:        args.InfluxDB,
-		RetentionPolicy: args.InfluxRP,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create InfluxDB batch: %w", err)
-	}
-	tags := map[string]string{
-		"aggregator": fmt.Sprintf("%s/%s", ProductName, Version),
-	}
-	maps.Copy(tags, args.Tags)
+	var retv []*influxdb.Point
 
 	for _, interval := range intervalsTodo {
 		if len(intervalData[interval]) == 0 {
@@ -258,26 +262,14 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 		fields := make(map[string]interface{})
 		mean, err := libwx.WeightedAvgDirectionDeg(dirSeries(intervalData[interval]), spdSeries(intervalData[interval]))
 		if err != nil {
-			return fmt.Errorf("failed to calculate weighted average wind direction: %w", err)
+			return nil, fmt.Errorf("failed to calculate weighted average wind direction: %w", err)
 		}
 		stdDev, err := libwx.WeightedStdDevDirectionDeg(dirSeries(intervalData[interval]), spdSeries(intervalData[interval]))
 		if err != nil {
-			return fmt.Errorf("failed to calculate weighted stddev of wind direction: %w", err)
+			return nil, fmt.Errorf("failed to calculate weighted stddev of wind direction: %w", err)
 		}
 		card := "VAR"
-		th := 50.0
-		if interval == wdInterval6h {
-			th = 60
-		} else if interval == wdInterval3h {
-			th = 55
-		} else if interval == wdInterval1h {
-			th = 52
-		} else if interval == wdInterval30m {
-			th = 51.5
-		} else if interval == wdInterval15m {
-			th = 51
-		}
-		if stdDev.Unwrap() < th {
+		if stdDev.Unwrap() < varThresholdForWindDirInterval(interval) {
 			card = libwx.DirectionStr(mean, libwx.DirectionStrPrecision2)
 		}
 		fields[wdMeanResultFieldName(args, interval)] = mean.Unwrap()
@@ -286,24 +278,15 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 
 		point, err := influxdb.NewPoint(
 			args.MeasurementTo,
-			tags,
+			args.WriteTags,
 			fields,
 			now.Add(-1*windDirIntervalToDuration(interval)/2),
 		)
 		if err != nil {
-			return fmt.Errorf("failed to create InfluxDB point: %w", err)
+			return nil, fmt.Errorf("failed to create InfluxDB point: %w", err)
 		}
-		bp.AddPoint(point)
+		retv = append(retv, point)
 	}
 
-	if err := retry.Do(
-		func() error {
-			return args.Influx.Write(bp)
-		},
-		retry.Attempts(args.InfluxWriteRetries),
-	); err != nil {
-		log.Printf("failed to write to Influx: %s", err.Error())
-	}
-
-	return nil
+	return retv, nil
 }
