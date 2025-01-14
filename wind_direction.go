@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"time"
 
 	"github.com/cdzombak/libwx"
@@ -268,6 +269,13 @@ func WindDirectionAgg(args WindDirectionAggArgs) ([]*influxdb.Point, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to calculate weighted stddev of wind direction: %w", err)
 		}
+		if math.IsNaN(mean.Unwrap()) {
+			return nil, fmt.Errorf("mean wind direction is NaN")
+		}
+		if math.IsNaN(stdDev.Unwrap()) {
+			return nil, fmt.Errorf("stddev of wind direction is NaN")
+		}
+
 		card := "VAR"
 		if stdDev.Unwrap() < varThresholdForWindDirInterval(interval) {
 			card = libwx.DirectionStr(mean, libwx.DirectionStrPrecision2)
