@@ -84,26 +84,6 @@ func maxTimeBetweenAggsForWindDirInterval(interval string) time.Duration {
 	}
 }
 
-func stdDevThresholdsForWindDirIntervalCardinalResult(interval string) (float64, float64) {
-	// returns: max (weighted) SD for secondary intercardinal, max SD for primary intercardinal (otherwise VAR)
-	switch interval {
-	case wdInterval6h:
-		return 40, 41.5
-	case wdInterval3h:
-		return 41, 42.5
-	case wdInterval1h:
-		return 42, 43.5
-	case wdInterval30m:
-		return 43, 44.5
-	case wdInterval15m:
-		return 44, 45.5
-	case wdInterval5m:
-		return 45, 46.5
-	default:
-		panic(fmt.Sprintf("unknown interval: %s", interval))
-	}
-}
-
 func wdMeanResultFieldName(args WindDirectionAggArgs, interval string) string {
 	return args.WindDirectionField + "_mean_" + interval
 }
@@ -284,13 +264,8 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 		if err != nil {
 			return fmt.Errorf("failed to calculate weighted stddev of wind direction: %w", err)
 		}
-		maxSecInt, maxInt := stdDevThresholdsForWindDirIntervalCardinalResult(interval)
-		card := ""
-		if stdDev.Unwrap() > maxInt {
-			card = "VAR"
-		} else if stdDev.Unwrap() > maxSecInt {
-			card = libwx.DirectionStr(mean, libwx.DirectionStrPrecision1)
-		} else {
+		card := "VAR"
+		if stdDev.Unwrap() < 50 {
 			card = libwx.DirectionStr(mean, libwx.DirectionStrPrecision2)
 		}
 		fields[wdMeanResultFieldName(args, interval)] = mean.Unwrap()
