@@ -265,7 +265,19 @@ func WindDirectionAgg(args WindDirectionAggArgs) error {
 			return fmt.Errorf("failed to calculate weighted stddev of wind direction: %w", err)
 		}
 		card := "VAR"
-		if stdDev.Unwrap() < 50 {
+		th := 50.0
+		if interval == wdInterval6h {
+			th = 60
+		} else if interval == wdInterval3h {
+			th = 55
+		} else if interval == wdInterval1h {
+			th = 52
+		} else if interval == wdInterval30m {
+			th = 51.5
+		} else if interval == wdInterval15m {
+			th = 51
+		}
+		if stdDev.Unwrap() < th {
 			card = libwx.DirectionStr(mean, libwx.DirectionStrPrecision2)
 		}
 		fields[wdMeanResultFieldName(args, interval)] = mean.Unwrap()
