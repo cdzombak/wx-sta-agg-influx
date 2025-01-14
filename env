@@ -1,3 +1,0 @@
-INFLUX_SERVER=http://jetstream.dzhome:8086
-INFLUX_DB=dzhome
-INFLUX_RP=autogen
