@@ -22,11 +22,6 @@ const (
 
 var Version = "<dev>"
 
-// TODO(cdzombak): basic CI for lint & binaries+docker+versioning
-// TODO(cdzombak): file issue for readme
-// TODO(cdzombak): file issue for increased Influx compatibility & config flexibility (eg. username, v2/v3) & validation
-// TODO(cdzombak): rain gauge aggregations (1h, 24h, event, rate: https://ambientweather.com/faqs/question/view/id/1454/ )
-
 func main() {
 	measurementName := flag.String("measurement", "weather_station", "Name of the measurement to read")
 	tagsIn := flag.String("tags", "", "Comma-separated list of tag=value pairs to filter by and include in result measurements")
@@ -87,6 +82,7 @@ func main() {
 	}
 
 	// TODO(cdzombak): rain gauge aggregation goes here, if rainGaugeField is set
+	//                 https://github.com/cdzombak/wx-sta-agg-influx/issues/3
 }
 
 func influxHealthcheck(client influxdb.Client) error {
