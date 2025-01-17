@@ -116,7 +116,7 @@ type wdDataPoint struct {
 	spd float64
 }
 
-func dirSeries(data []wdDataPoint) []libwx.Degree {
+func dirSeriesFromWd(data []wdDataPoint) []libwx.Degree {
 	retv := make([]libwx.Degree, len(data))
 	for i, dp := range data {
 		retv[i] = dp.dir
@@ -124,10 +124,20 @@ func dirSeries(data []wdDataPoint) []libwx.Degree {
 	return retv
 }
 
-func spdSeries(data []wdDataPoint) []float64 {
+func spdSeriesFromWd(data []wdDataPoint) []float64 {
 	retv := make([]float64, len(data))
 	for i, dp := range data {
 		retv[i] = dp.spd
+	}
+	return retv
+}
+
+func filterWdSeries(data []wdDataPoint, f func(point wdDataPoint) bool) []wdDataPoint {
+	retv := []wdDataPoint{}
+	for _, dp := range data {
+		if f(dp) {
+			retv = append(retv, dp)
+		}
 	}
 	return retv
 }
@@ -261,28 +271,45 @@ func WindDirectionAgg(args WindDirectionAggArgs) ([]*influxdb.Point, error) {
 			continue
 		}
 		fields := make(map[string]interface{})
-		mean, err := libwx.WeightedAvgDirectionDeg(dirSeries(intervalData[interval]), spdSeries(intervalData[interval]))
-		if err != nil {
-			return nil, fmt.Errorf("failed to calculate weighted average wind direction: %w", err)
-		}
-		stdDev, err := libwx.WeightedStdDevDirectionDeg(dirSeries(intervalData[interval]), spdSeries(intervalData[interval]))
-		if err != nil {
-			return nil, fmt.Errorf("failed to calculate weighted stddev of wind direction: %w", err)
-		}
-		if math.IsNaN(mean.Unwrap()) {
-			return nil, fmt.Errorf("mean wind direction is NaN")
-		}
-		if math.IsNaN(stdDev.Unwrap()) {
-			return nil, fmt.Errorf("stddev of wind direction is NaN")
-		}
 
-		card := "VAR"
-		if stdDev.Unwrap() < varThresholdForWindDirInterval(interval) {
-			card = libwx.DirectionStr(mean, libwx.DirectionStrPrecision2)
+		dataSeries := filterWdSeries(intervalData[interval], func(dp wdDataPoint) bool {
+			return dp.spd > 0.001
+		})
+		dirSeries := dirSeriesFromWd(dataSeries)
+		spdSeries := spdSeriesFromWd(dataSeries)
+
+		if len(dirSeries) == 0 {
+			fields[wdMeanResultFieldName(args, interval)] = 0
+			fields[wdMeanIntercardinalResultFieldName(args, interval)] = "NIL"
+		} else if len(dirSeries) == 1 {
+			fields[wdMeanResultFieldName(args, interval)] = dirSeries[0]
+			fields[wdStdDevResultFieldName(args, interval)] = 0
+			fields[wdMeanIntercardinalResultFieldName(args, interval)] = libwx.DirectionStr(dirSeries[0], libwx.DirectionStrPrecision1)
+		} else {
+			mean, err := libwx.WeightedAvgDirectionDeg(dirSeries, spdSeries)
+			if err != nil {
+				return nil, fmt.Errorf("failed to calculate weighted average wind direction: %w", err)
+			}
+			if math.IsNaN(mean.Unwrap()) {
+				return nil, fmt.Errorf("mean wind direction is NaN")
+			}
+
+			stdDev, err := libwx.WeightedStdDevDirectionDeg(dirSeries, spdSeries)
+			if err != nil {
+				return nil, fmt.Errorf("failed to calculate weighted stddev of wind direction: %w", err)
+			}
+			if math.IsNaN(stdDev.Unwrap()) {
+				return nil, fmt.Errorf("stddev of wind direction is NaN")
+			}
+
+			card := "VAR"
+			if stdDev.Unwrap() < varThresholdForWindDirInterval(interval) {
+				card = libwx.DirectionStr(mean, libwx.DirectionStrPrecision2)
+			}
+			fields[wdMeanResultFieldName(args, interval)] = mean.Unwrap()
+			fields[wdStdDevResultFieldName(args, interval)] = stdDev.Unwrap()
+			fields[wdMeanIntercardinalResultFieldName(args, interval)] = card
 		}
-		fields[wdMeanResultFieldName(args, interval)] = mean.Unwrap()
-		fields[wdStdDevResultFieldName(args, interval)] = stdDev.Unwrap()
-		fields[wdMeanIntercardinalResultFieldName(args, interval)] = card
 
 		point, err := influxdb.NewPoint(
 			args.MeasurementTo,
