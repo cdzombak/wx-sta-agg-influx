@@ -293,6 +293,7 @@ func WindDirectionAgg(args WindDirectionAggArgs) ([]*influxdb.Point, error) {
 			if math.IsNaN(mean.Unwrap()) {
 				return nil, fmt.Errorf("mean wind direction is NaN")
 			}
+			mean = mean.Clamped()
 
 			stdDev, err := libwx.WeightedStdDevDirectionDeg(dirSeries, spdSeries)
 			if err != nil {
