@@ -2,12 +2,8 @@ github.com/avast/retry-go v3.0.0+incompatible h1:4SOWQ7Qs+oroOTQOYnAHqelpCO0biHS
 github.com/avast/retry-go v3.0.0+incompatible/go.mod h1:XtSnn+n/sHqQIpZ10K1qAevBhOOCWBLXXy3hyiqqBrY=
 github.com/cdzombak/exitcode_go v0.0.1 h1:9efZXd2nF7RtUV67lnfR1WaubnlDh+Io0wVG4hGX2p4=
 github.com/cdzombak/exitcode_go v0.0.1/go.mod h1:VvYt055HSseEAPgdTHVevUdR1xoBp1tWvIAflepES+U=
-github.com/cdzombak/libwx v1.2.1-0.20250112185947-0412467efb70 h1:oJPB/mKhVobPAgC5vhcZzmal8Z8/hR925h+U1FJcioU=
-github.com/cdzombak/libwx v1.2.1-0.20250112185947-0412467efb70/go.mod h1:V7luoFKjP+d+bvVF+BDAU4weSFtYHUOPseapzkVDWt4=
-github.com/cdzombak/libwx v1.2.1-0.20250113145557-f2640636274d h1:Yc7MqUqQD1B79XLWEFqzlBr37N5KjfWlyyT4B28KmUk=
-github.com/cdzombak/libwx v1.2.1-0.20250113145557-f2640636274d/go.mod h1:V7luoFKjP+d+bvVF+BDAU4weSFtYHUOPseapzkVDWt4=
-github.com/cdzombak/libwx v1.3.0 h1:XTZF95ZZBjW7c4WH3jEr2aTdmxKxo5gNIQfulINnwUM=
-github.com/cdzombak/libwx v1.3.0/go.mod h1:V7luoFKjP+d+bvVF+BDAU4weSFtYHUOPseapzkVDWt4=
+github.com/cdzombak/libwx v1.3.1 h1:r9E7sWrSJAXm89rZi/lCRG4fOW2PUermoXDatewtr9I=
+github.com/cdzombak/libwx v1.3.1/go.mod h1:V7luoFKjP+d+bvVF+BDAU4weSFtYHUOPseapzkVDWt4=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/influxdata/influxdb1-client v0.0.0-20220302092344-a9ab5670611c h1:qSHzRbhzK8RdXOsAdfDgO49TtqC1oZ+acxPrkfTxcCs=
