@@ -230,7 +230,7 @@ func WindDirectionAgg(args WindDirectionAggArgs) ([]*influxdb.Point, error) {
 		return nil, fmt.Errorf("expected second column to be '%s', got '%s'", args.WindDirectionField, r.Results[0].Series[0].Columns[1])
 	}
 	if r.Results[0].Series[0].Columns[2] != args.WindSpeedField {
-		return nil, fmt.Errorf("expected thirs column to be '%s', got '%s'", args.WindSpeedField, r.Results[0].Series[0].Columns[2])
+		return nil, fmt.Errorf("expected third column to be '%s', got '%s'", args.WindSpeedField, r.Results[0].Series[0].Columns[2])
 	}
 
 	// aggregate data by interval:
@@ -241,6 +241,9 @@ func WindDirectionAgg(args WindDirectionAggArgs) ([]*influxdb.Point, error) {
 	}
 	for _, sourceDataPoint := range r.Results[0].Series[0].Values {
 		// this parsing could be cleaned up and made a lot more robust.
+		if sourceDataPoint[1] == nil || sourceDataPoint[2] == nil {
+			continue
+		}
 		dir, err := sourceDataPoint[1].(json.Number).Float64()
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse wind direction: %w", err)
