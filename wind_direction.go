@@ -84,19 +84,20 @@ func maxTimeBetweenAggsForWindDirInterval(interval string) time.Duration {
 }
 
 func varThresholdForWindDirInterval(interval string) float64 {
-	th := 50.0
-	if interval == wdInterval6h {
-		th = 60
-	} else if interval == wdInterval3h {
-		th = 55
-	} else if interval == wdInterval1h {
-		th = 52
-	} else if interval == wdInterval30m {
-		th = 51.5
-	} else if interval == wdInterval15m {
-		th = 51
+	switch interval {
+	case wdInterval6h:
+		return 60
+	case wdInterval3h:
+		return 55
+	case wdInterval1h:
+		return 52
+	case wdInterval30m:
+		return 51.5
+	case wdInterval15m:
+		return 51
+	default:
+		return 50.0
 	}
-	return th
 }
 
 func wdMeanResultFieldName(args WindDirectionAggArgs, interval string) string {

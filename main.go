@@ -6,6 +6,9 @@ import (
 	"log"
 	"maps"
 	"os"
+	"sort"
+	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/avast/retry-go"
@@ -29,8 +32,9 @@ func main() {
 	tagsIn := flag.String("tags", "", "Comma-separated list of tag=value pairs to filter by and include in result measurements")
 	windDirectionField := flag.String("wind-dir-field", "", "Name of the field to use for wind direction (in degrees); if not set, wind direction will not be aggregated")
 	windSpeedField := flag.String("wind-speed-field", "", "Name of the field to use for wind speed; required iff wind-dir-field is given")
-	// rainGaugeField := flag.String("rain-field", "", "Name of the field to use for rain gauge (in mm); if not set, rain gauge will not be aggregated")
+	rainGaugeField := flag.String("rain-field", "", "Name of the field to use for rain gauge (in mm); if not set, rain gauge will not be aggregated")
 	envFileName := flag.String("env", "", "Path to .env file to load environment variables from")
+	dryRun := flag.Bool("dry-run", false, "Print points that would be written instead of writing to InfluxDB")
 	printVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
 
@@ -92,11 +96,31 @@ func main() {
 		points = append(points, wdPoints...)
 	}
 
-	// TODO(cdzombak): rain gauge aggregation goes here, if rainGaugeField is set
-	//                 https://github.com/cdzombak/wx-sta-agg-influx/issues/3
+	if *rainGaugeField != "" {
+		rainPoints, err := RainAgg(RainAggArgs{
+			MeasurementFrom:    *measurementName,
+			MeasurementTo:      *measurementName + "_agg",
+			QueryTags:          qTags,
+			WriteTags:          wTags,
+			RainField:          *rainGaugeField,
+			Influx:             influxClient,
+			InfluxDB:           os.Getenv("INFLUX_DB"),
+			InfluxRP:           os.Getenv("INFLUX_RP"),
+			InfluxQueryTimeout: influxReadTimeout,
+		})
+		if err != nil {
+			log.Fatalf("Rain gauge aggregation failed: %s", err)
+		}
+		points = append(points, rainPoints...)
+	}
 
 	if len(points) == 0 {
 		log.Printf("no data to write")
+		return
+	}
+
+	if *dryRun {
+		printPoints(points)
 		return
 	}
 
@@ -123,4 +147,32 @@ func main() {
 func influxHealthcheck(client influxdb.Client) error {
 	_, _, err := client.Ping(influxReadTimeout)
 	return err
+}
+
+func printPoints(points []*influxdb.Point) {
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	_, _ = fmt.Fprintln(w, "MEASUREMENT\tTIME\tTAGS\tFIELDS")
+	for _, p := range points {
+		tags := p.Tags()
+		tagParts := make([]string, 0, len(tags))
+		for k, v := range tags {
+			tagParts = append(tagParts, fmt.Sprintf("%s=%s", k, v))
+		}
+		sort.Strings(tagParts)
+
+		fields, _ := p.Fields()
+		fieldParts := make([]string, 0, len(fields))
+		for k, v := range fields {
+			fieldParts = append(fieldParts, fmt.Sprintf("%s=%v", k, v))
+		}
+		sort.Strings(fieldParts)
+
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+			p.Name(),
+			p.Time().Format(time.RFC3339),
+			strings.Join(tagParts, ","),
+			strings.Join(fieldParts, ","),
+		)
+	}
+	_ = w.Flush()
 }
