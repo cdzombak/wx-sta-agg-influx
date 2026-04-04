@@ -246,7 +246,6 @@ func rainEventAgg(args RainAggArgs, tagsWhere string, rain24h float64) (float64,
 	}
 
 	prevEventTotal := 0.0
-	prevEventTime := time.Time{}
 
 	if r.Results[0].Series[0].Values[0][1] != nil {
 		prevEventTotal, err = r.Results[0].Series[0].Values[0][1].(json.Number).Float64()
@@ -254,7 +253,7 @@ func rainEventAgg(args RainAggArgs, tagsWhere string, rain24h float64) (float64,
 			return 0, fmt.Errorf("failed to parse previous event total: %w", err)
 		}
 	}
-	prevEventTime, err = time.Parse(time.RFC3339, r.Results[0].Series[0].Values[0][0].(string))
+	prevEventTime, err := time.Parse(time.RFC3339, r.Results[0].Series[0].Values[0][0].(string))
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse previous event time: %w", err)
 	}

@@ -151,7 +151,7 @@ func influxHealthcheck(client influxdb.Client) error {
 
 func printPoints(points []*influxdb.Point) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "MEASUREMENT\tTIME\tTAGS\tFIELDS")
+	_, _ = fmt.Fprintln(w, "MEASUREMENT\tTIME\tTAGS\tFIELDS")
 	for _, p := range points {
 		tags := p.Tags()
 		tagParts := make([]string, 0, len(tags))
@@ -167,12 +167,12 @@ func printPoints(points []*influxdb.Point) {
 		}
 		sort.Strings(fieldParts)
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 			p.Name(),
 			p.Time().Format(time.RFC3339),
 			strings.Join(tagParts, ","),
 			strings.Join(fieldParts, ","),
 		)
 	}
-	w.Flush()
+	_ = w.Flush()
 }
