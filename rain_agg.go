@@ -159,5 +159,40 @@ func RainAgg(args RainAggArgs) ([]*influxdb.Point, error) {
 		retv = append(retv, p)
 	}
 
+	// calculate rain rate (rain over past 10 minutes, extrapolated to per-hour):
+	var rateData []rainDataPoint
+	for _, dp := range allData {
+		if latestTime.Sub(dp.t) <= 10*time.Minute {
+			rateData = append(rateData, dp)
+		}
+	}
+	if len(rateData) > 0 {
+		rateTotal := 0.0
+		prevDP := math.NaN()
+		for _, dp := range rateData {
+			if !math.IsNaN(prevDP) {
+				if dp.rain < prevDP {
+					prevDP = dp.rain
+					continue
+				}
+				rateTotal += dp.rain - prevDP
+			}
+			prevDP = dp.rain
+		}
+
+		p, err := influxdb.NewPoint(
+			args.MeasurementTo,
+			args.WriteTags,
+			map[string]any{
+				args.RainField + "_rate": rateTotal * 6,
+			},
+			latestTime,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create InfluxDB point: %w", err)
+		}
+		retv = append(retv, p)
+	}
+
 	return retv, nil
 }
