@@ -74,6 +74,54 @@ When `-rain-field` is provided, the following fields are written:
 
 ## Installation
 
+### Docker
+
+Docker images are available for a variety of Linux architectures from [Docker Hub](https://hub.docker.com/r/cdzombak/wx-sta-agg-influx) and [GHCR](https://github.com/cdzombak/wx-sta-agg-influx/pkgs/container/wx-sta-agg-influx).
+
+```shell
+docker pull ghcr.io/cdzombak/wx-sta-agg-influx:latest
+```
+
+```shell
+docker run --rm \
+  -e INFLUX_SERVER=http://influxdb:8086 \
+  -e INFLUX_DB=mydb \
+  -e INFLUX_RP=autogen \
+  ghcr.io/cdzombak/wx-sta-agg-influx:latest \
+  -measurement weather_station \
+  -tags "station=home" \
+  -wind-dir-field wind_dir \
+  -wind-speed-field wind_speed \
+  -rain-field rain
+```
+
+### Debian via apt
+
+Install the apt repository:
+
+```shell
+sudo apt-get install ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://dist.cdzombak.net/deb.key | sudo gpg --dearmor -o /etc/apt/keyrings/dist-cdzombak-net.gpg
+sudo chmod 644 /etc/apt/keyrings/dist-cdzombak-net.gpg
+sudo mkdir -p /etc/apt/sources.list.d
+sudo curl -fsSL https://dist.cdzombak.net/cdzombak-oss.sources -o /etc/apt/sources.list.d/cdzombak-oss.sources
+sudo chmod 644 /etc/apt/sources.list.d/cdzombak-oss.sources
+sudo apt update
+```
+
+Then install the package:
+
+```shell
+sudo apt-get install wx-sta-agg-influx
+```
+
+### Homebrew (macOS)
+
+```shell
+brew install cdzombak/oss/wx-sta-agg-influx
+```
+
 ### From Source
 
 ```sh
@@ -85,3 +133,9 @@ The binary is written to `./out/wx-sta-agg-influx`.
 ## License
 
 See [LICENSE](LICENSE).
+
+## Author
+
+Chris Dzombak
+- [dzombak.com](https://dzombak.com)
+- [GitHub @cdzombak](https://www.github.com/cdzombak)
