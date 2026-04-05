@@ -225,8 +225,8 @@ func rainEventAgg(args RainAggArgs, tagsWhere string, rain24h float64) (float64,
 
 	// read the previous event total from the agg measurement:
 	eventField := rainEventFieldName(args)
-	q := fmt.Sprintf("SELECT time, %s FROM %s WHERE %s != '' %s ORDER BY time DESC LIMIT 1",
-		eventField, args.MeasurementTo, eventField, tagsWhere)
+	q := fmt.Sprintf("SELECT time, %s FROM %s WHERE time > 0 %s ORDER BY time DESC LIMIT 1",
+		eventField, args.MeasurementTo, tagsWhere)
 	log.Printf("[DEBUG] query: %s", q)
 	r, err := args.Influx.Query(influxdb.Query{
 		Command:         q,
