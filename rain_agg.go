@@ -175,7 +175,9 @@ func RainAgg(args RainAggArgs) ([]*influxdb.Point, error) {
 		retv = append(retv, p)
 	}
 
-	// rain rate (rain over past 10 minutes, extrapolated to per-hour):
+	// rain rate (rain over past 10 minutes, extrapolated to per-hour).
+	// timestamp at the midpoint of the 10-minute window (T-5min) rather than the
+	// trailing edge, since the rate is an aggregate over that window.
 	var rateData []rainDataPoint
 	for _, dp := range allData {
 		if latestTime.Sub(dp.t) <= 10*time.Minute {
@@ -189,7 +191,7 @@ func RainAgg(args RainAggArgs) ([]*influxdb.Point, error) {
 			map[string]any{
 				args.RainField + "_rate": accumRain(rateData) * 6,
 			},
-			latestTime,
+			latestTime.Add(-5*time.Minute),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create InfluxDB point: %w", err)
