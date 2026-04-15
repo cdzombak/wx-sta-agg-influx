@@ -265,8 +265,11 @@ func rainEventAgg(args RainAggArgs, tagsWhere string, rain24h float64) (float64,
 		return rain24h, nil
 	}
 
-	// query raw rain data since the previous event agg to calculate new rain:
-	q = fmt.Sprintf("SELECT time, %s FROM %s WHERE time > '%s' %s ORDER BY time ASC",
+	// query raw rain data since the previous event agg to calculate new rain.
+	// use >= so the data point at prevEventTime is included as the baseline for
+	// accumRain; otherwise the delta between that point and the next one is lost
+	// each cycle, causing the event total to drift below the true total.
+	q = fmt.Sprintf("SELECT time, %s FROM %s WHERE time >= '%s' %s ORDER BY time ASC",
 		args.RainField, args.MeasurementFrom, prevEventTime.Format(time.RFC3339), tagsWhere)
 	log.Printf("[DEBUG] query: %s", q)
 	r, err = args.Influx.Query(influxdb.Query{
